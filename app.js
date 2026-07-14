@@ -6,14 +6,14 @@ import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import './style.css';
 
-// ⚠️ REPLACE WITH YOUR FIREBASE CONFIG
+
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
+  apiKey: "AIzaSyAwb6ozidFs6_LFW0ktj8oBDAcAFJpe7Ag",
   authDomain: "kings-voting2026.firebaseapp.com",
   projectId: "kings-voting2026",
-  storageBucket: "kings-voting2026.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  storageBucket: "kings-voting2026.firebasestorage.app",
+  messagingSenderId: "708043016849",
+  appId: "1:708043016849:web:e658aa9b22286016c20d30"
 };
 
 const app = initializeApp(firebaseConfig);
