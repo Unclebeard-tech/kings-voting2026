@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kings Voting 2026</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Kings Voting 2026</h1>
+      <p id="status" class="status-loading">Initializing...</p>
+    </header>
+
+    <main>
+      <section class="card">
+        <h2>System Check</h2>
+        <div id="systemCheck">Running checks...</div>
+      </section>
+
+      <section class="card">
+        <h2>Admin Settings</h2>
+        <div id="adminSettings">Waiting for database...</div>
+      </section>
+
+      <section class="card">
+        <h2>Students</h2>
+        <div id="studentList">Waiting for database...</div>
+      </section>
+
+      <section class="card">
+        <h2>Cast Vote</h2>
+        <form id="voteForm">
+          <label>Select Student</label>
+          <select id="studentSelect" required>
+            <option value="">Loading students...</option>
+          </select>
+          <label>Select Candidate</label>
+          <select id="candidateSelect" required>
+            <option value="">Loading candidates...</option>
+          </select>
+          <button type="submit" id="voteBtn" disabled>Submit Vote</button>
+        </form>
+        <div id="voteStatus"></div>
+      </section>
+
+      <section class="card">
+        <h2>Live Results</h2>
+        <div id="results">Waiting for votes...</div>
+      </section>
+    </main>
+  </div>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
