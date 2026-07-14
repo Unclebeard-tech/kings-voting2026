@@ -106,7 +106,7 @@ function VotingPage() {
 
   if (step === 'vote') return (
     <div className="container">
-      <h1>King's College Budo Elections 2026</h1>
+      <h1>The Kings Learning Christian Academy Elections 2026</h1>
       <p><b>Student ID:</b> {studentId} | <b>Grade:</b> {grade}</p>
       {positions.map(pos => (
         <div key={pos.id} className="position">
