@@ -16,20 +16,10 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 function Logo() {
-  return <img src="/images/kings-logo.jpg" alt="Kings Logo" style={{width:'130px', height:'130px', objectFit:'contain', margin:'10px auto', display:'block', borderRadius:'12px'}} onError={e=>e.target.style.display='none'} />;
+  return <img src="/images/kings-logo.jpg" alt="Kings Logo" style={{width:'130px', height:'130px', objectFit:'contain', margin:'10px auto', display:'block', borderRadius:'12px'}} onError={e=>{e.target.style.display='none'; console.log('LOGO NOT FOUND at /images/kings-logo.jpg')}} />;
 }
 
-const DEFAULT_POSITIONS = [
-  "PRESIDENT",
-  "SPEAKER",
-  "ACADEMICS MINISTER",
-  "HEALTH MINISTER",
-  "TIME KEEPER",
-  "WELFARE MINISTER",
-  "CO-CIRRICULAR MINISTER",
-  "INFORMATION MINISTER",
-  "EVENTS MINISTER"
-];
+const DEFAULT_POSITIONS = ["PRESIDENT","SPEAKER","ACADEMICS MINISTER","HEALTH MINISTER","TIME KEEPER","WELFARE MINISTER","CO-CIRRICULAR MINISTER","INFORMATION MINISTER","EVENTS MINISTER"];
 
 const DEFAULT_CANDIDATES = [
   { name: "AKAMPA JOSIAH", position: "TIME KEEPER", photo: "/images/candidates/time-keeper-akampa-josiah.jpg" },
@@ -85,8 +75,9 @@ function VotingPage() {
           <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(180px,1fr))', gap:'15px', marginTop:'15px'}}>
             {candidates.filter(c=>c.positionId===pos.id).map(cand=>(
               <label key={cand.id} style={{border: votes[pos.id]===cand.id ? '3px solid #0f766e':'1px solid #eee', borderRadius:'12px', padding:'10px', cursor:'pointer', textAlign:'center', background: votes[pos.id]===cand.id ? '#f0fdfa':'white'}}>
-                <img src={cand.photoUrl} alt={cand.name} style={{width:'100%', height:'200px', objectFit:'cover', borderRadius:'8px'}} onError={e=>e.target.style.display='none'} />
+                <img src={cand.photoUrl} alt={cand.name} style={{width:'100%', height:'200px', objectFit:'cover', borderRadius:'8px', background:'#f3f4f6'}} onError={e=>{e.target.style.border='2px solid red'; e.target.alt='IMAGE NOT FOUND: '+cand.photoUrl; console.log('FAILED IMAGE', cand.photoUrl)}} />
                 <div style={{fontWeight:'bold', marginTop:'8px', fontSize:'13px'}}>{cand.name}</div>
+                <div style={{fontSize:'10px', color:'#666', wordBreak:'break-all'}}>{cand.photoUrl}</div>
                 <input type="radio" name={pos.id} checked={votes[pos.id]===cand.id} onChange={()=>setVotes({...votes,[pos.id]:cand.id})} style={{marginTop:'8px'}} /> Vote
               </label>
             ))}
@@ -121,7 +112,7 @@ function AdminPage() {
   };
   useEffect(()=>{ if(auth) loadAll(); },[auth]);
   const seedDefaults = async () => {
-    if(!confirm(`Seed all ${DEFAULT_CANDIDATES.length} candidates? This will create ${DEFAULT_POSITIONS.length} positions (President, Speaker, Academics, Health, Time Keeper, Welfare, Co-Cirricular, Info, Events)`)) return;
+    if(!confirm(`Seed all ${DEFAULT_CANDIDATES.length} candidates? This will create ${DEFAULT_POSITIONS.length} positions`)) return;
     let posMap={};
     for(let i=0;i<DEFAULT_POSITIONS.length;i++){
       const title=DEFAULT_POSITIONS[i]; const ex=positions.find(p=>p.title.toUpperCase()===title); if(ex){posMap[title]=ex.id; continue;}
@@ -134,11 +125,16 @@ function AdminPage() {
       const pid=posMap[c.position]||posMap[c.position.toUpperCase()]; if(!pid) continue;
       await addDoc(collection(db,'candidates'),{name:c.name, positionId:pid, photoUrl:c.photo, createdAt:new Date()}); added++;
     }
-    alert(`Done! Added ${added} new candidates. Total now: ${candidates.length+added}. Academics & Health ministers included.`); loadAll();
+    alert(`Done! Added ${added} new candidates.`); loadAll();
   };
   const resetAllVotes = async () => {
     const c1=prompt("Type RESET to DELETE ALL VOTES permanently"); if(c1!=="RESET") return; if(!confirm("REALLY sure? Cannot undo.")) return;
     try{ const vs=await getDocs(collection(db,'votes')); for(let d of vs.docs) await deleteDoc(doc(db,'votes',d.id)); const ss=await getDocs(collection(db,'students')); for(let d of ss.docs) await updateDoc(doc(db,'students',d.id),{hasVoted:false}); alert("All votes reset! Students can vote again."); loadAll(); } catch(err){ alert("Failed: "+err.message); }
+  };
+  const deleteAllCandidates = async () => {
+    if(!confirm("DELETE ALL CANDIDATES from Firebase? Then you must re-seed.")) return;
+    const c2=prompt("Type DELETE to confirm"); if(c2!=="DELETE") return;
+    try{ const cs=await getDocs(collection(db,'candidates')); for(let d of cs.docs) await deleteDoc(doc(db,'candidates',d.id)); alert(`Deleted ${cs.docs.length} candidates. Now click SEED button.`); loadAll(); } catch(e){ alert(e.message); }
   };
   const addPosition=async()=>{ if(!newPosTitle.trim()) return; await addDoc(collection(db,'positions'),{title:newPosTitle.trim().toUpperCase(),order:positions.length+1}); setNewPosTitle(''); loadAll(); };
   const deletePosition=async(id)=>{ if(!confirm('Delete position?')) return; await deleteDoc(doc(db,'positions',id)); loadAll(); };
@@ -148,25 +144,26 @@ function AdminPage() {
   return (
     <div style={{maxWidth:'1200px', margin:'0 auto', padding:'20px'}}>
       <div style={{display:'flex', alignItems:'center', gap:'15px'}}><Logo/><h1>Admin Portal - Kings 2026/27 - {candidates.length} Candidates</h1></div>
+      <div style={{background:'#ecfdf5', border:'1px solid #0f766e', padding:'10px', borderRadius:'8px', margin:'10px 0'}}>Test images: <a href="/images/kings-logo.jpg" target="_blank">/images/kings-logo.jpg</a> | <a href="/images/candidates/president-denise-uwera-nkanika.jpg" target="_blank">Test President Photo</a> - If these 2 links show images, GitHub is OK. If 404, wait for Netlify deploy.</div>
       <div style={{display:'flex', gap:'10px', margin:'20px 0', flexWrap:'wrap'}}>
         <button onClick={()=>setTab('candidates')} style={{background:tab==='candidates'?'#0f766e':'#eee', color:tab==='candidates'?'white':'black', padding:'10px 15px', border:'none', borderRadius:'6px'}}>Candidates ({candidates.length})</button>
         <button onClick={()=>setTab('positions')} style={{background:tab==='positions'?'#0f766e':'#eee', padding:'10px 15px', border:'none', borderRadius:'6px'}}>Positions ({positions.length})</button>
         <button onClick={()=>setTab('results')} style={{background:tab==='results'?'#0f766e':'#eee', padding:'10px 15px', border:'none', borderRadius:'6px'}}>Results</button>
-        <button onClick={seedDefaults} style={{background:'#f59e0b', color:'white', padding:'12px 18px', border:'none', borderRadius:'6px', marginLeft:'auto', fontWeight:'bold'}}>⚡ ONE-CLICK: Seed All 28 Posters</button>
-        <button onClick={resetAllVotes} style={{background:'red', color:'white', padding:'12px 18px', border:'none', borderRadius:'6px', fontWeight:'bold'}}>RESET ALL VOTES</button>
+        <button onClick={seedDefaults} style={{background:'#f59e0b', color:'white', padding:'12px 18px', border:'none', borderRadius:'6px', marginLeft:'auto', fontWeight:'bold'}}>⚡ ONE-CLICK: Seed All 28</button>
+        <button onClick={deleteAllCandidates} style={{background:'#7c3aed', color:'white', padding:'12px 18px', border:'none', borderRadius:'6px', fontWeight:'bold'}}>🗑️ DELETE ALL CANDIDATES</button>
+        <button onClick={resetAllVotes} style={{background:'red', color:'white', padding:'12px 18px', border:'none', borderRadius:'6px', fontWeight:'bold'}}>RESET VOTES</button>
       </div>
-      {tab==='positions' && <><h2>Positions - Academics & Health included</h2><div style={{display:'flex', gap:'10px'}}><input value={newPosTitle} onChange={e=>setNewPosTitle(e.target.value)} placeholder="e.g. Health Minister" style={{flex:1, padding:'10px'}} /><button onClick={addPosition} style={{padding:'10px 20px', background:'#0f766e', color:'white', border:'none', borderRadius:'6px'}}>Add</button></div><ul style={{marginTop:'15px'}}>{positions.map(p=><li key={p.id} style={{display:'flex', justifyContent:'space-between', padding:'10px', borderBottom:'1px solid #eee'}}>{p.title}<button onClick={()=>deletePosition(p.id)} style={{color:'red', background:'none', border:'none'}}>Delete</button></li>)}</ul></>}
+      {tab==='positions' && <><h2>Positions</h2><div style={{display:'flex', gap:'10px'}}><input value={newPosTitle} onChange={e=>setNewPosTitle(e.target.value)} placeholder="e.g. Health Minister" style={{flex:1, padding:'10px'}} /><button onClick={addPosition} style={{padding:'10px 20px', background:'#0f766e', color:'white', border:'none', borderRadius:'6px'}}>Add</button></div><ul style={{marginTop:'15px'}}>{positions.map(p=><li key={p.id} style={{display:'flex', justifyContent:'space-between', padding:'10px', borderBottom:'1px solid #eee'}}>{p.title}<button onClick={()=>deletePosition(p.id)} style={{color:'red', background:'none', border:'none'}}>Delete</button></li>)}</ul></>}
       {tab==='candidates' && <>
-        <div style={{background:'#fffbeb', border:'1px solid #f59e0b', padding:'12px', borderRadius:'8px', marginBottom:'15px'}}>Photo paths must be: <b>/images/candidates/xxx.jpg</b> - make sure you uploaded the 28 zip to public/images/candidates/</div>
         <form onSubmit={addCandidate} style={{border:'1px solid #ddd', padding:'15px', borderRadius:'10px', background:'#f9fafb', marginBottom:'20px'}}>
-          <h3>Add Single Candidate (FREE - no Storage)</h3>
+          <h3>Add Single Candidate</h3>
           <input placeholder="Full Name" value={newCand.name} onChange={e=>setNewCand({...newCand,name:e.target.value})} required style={{width:'100%', padding:'10px', marginBottom:'10px'}} />
           <select value={newCand.positionId} onChange={e=>setNewCand({...newCand,positionId:e.target.value})} required style={{width:'100%', padding:'10px', marginBottom:'10px'}}><option value="">Select Position</option>{positions.map(p=><option key={p.id} value={p.id}>{p.title}</option>)}</select>
           <input placeholder="/images/candidates/photo.jpg" value={newCand.photoUrl} onChange={e=>setNewCand({...newCand,photoUrl:e.target.value})} style={{width:'100%', padding:'10px', marginBottom:'10px'}} />
           <button type="submit" style={{padding:'10px 20px', background:'#0f766e', color:'white', border:'none', borderRadius:'6px'}}>Add Candidate</button>
         </form>
         <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(180px,1fr))', gap:'15px'}}>
-          {candidates.map(c=><div key={c.id} style={{border:'1px solid #ddd', borderRadius:'10px', padding:'10px', background:'white'}}><img src={c.photoUrl} alt={c.name} style={{width:'100%', height:'180px', objectFit:'cover', borderRadius:'8px'}} onError={e=>e.target.style.display='none'} /><div style={{fontWeight:'bold', fontSize:'12px', marginTop:'6px'}}>{c.name}</div><small>{positions.find(p=>p.id===c.positionId)?.title}</small><br/><button onClick={()=>deleteCandidate(c.id)} style={{color:'red', fontSize:'11px', background:'none', border:'none'}}>Delete</button></div>)}
+          {candidates.map(c=><div key={c.id} style={{border:'1px solid #ddd', borderRadius:'10px', padding:'10px', background:'white'}}><img src={c.photoUrl} alt={c.name} style={{width:'100%', height:'180px', objectFit:'cover', borderRadius:'8px', background:'#eee'}} onError={e=>{e.target.style.border='3px solid red'; console.log('IMG FAIL', c.photoUrl)}} /><div style={{fontWeight:'bold', fontSize:'12px', marginTop:'6px'}}>{c.name}</div><small style={{wordBreak:'break-all', fontSize:'10px'}}>{c.photoUrl}</small><br/><small>{positions.find(p=>p.id===c.positionId)?.title}</small><br/><button onClick={()=>deleteCandidate(c.id)} style={{color:'red', fontSize:'11px', background:'none', border:'none'}}>Delete</button></div>)}
         </div>
       </>}
       {tab==='results' && <div style={{display:'grid', gap:'30px'}}>{results.map((r,i)=><div key={i} style={{background:'white', padding:'15px', borderRadius:'10px'}}><h2>{r.position} - {r.candidates.reduce((a,b)=>a+b.votes,0)} votes</h2><ResponsiveContainer width="100%" height={300}><BarChart data={r.candidates}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" interval={0} angle={-25} textAnchor="end" height={100} fontSize={11} /><YAxis allowDecimals={false} /><Tooltip /><Legend /><Bar dataKey="votes" fill="#0f766e" /></BarChart></ResponsiveContainer></div>)}</div>}
