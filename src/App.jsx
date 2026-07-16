@@ -1,212 +1,171 @@
-import { useEffect, useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { initializeApp } from 'firebase/app'
-import { 
-  getFirestore, collection, getDocs, addDoc, doc, getDoc, updateDoc, 
-  query, where, serverTimestamp 
-} from 'firebase/firestore'
+import { getFirestore, doc, getDoc, setDoc, collection, getDocs } from 'firebase/firestore'
 
-// Your env vars from Netlify
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID
+  apiKey: "AIzaSyAwb6ozidFs6_LFW0ktj8oBDAcAFJpe7Ag",
+  authDomain: "kings-voting2026.firebaseapp.com",
+  projectId: "kings-voting2026",
+  storageBucket: "kings-voting2026.firebasestorage.app",
+  messagingSenderId: "708043016849",
+  appId: "1:708043016849:web:e658aa9b22286016c20d30"
 };
 
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+const app = initializeApp(firebaseConfig)
+const db = getFirestore(app)
 
-function App() {
-  const [candidates, setCandidates] = useState([])
-  const [studentId, setStudentId] = useState('')
-  const [voucher, setVoucher] = useState('')
-  const [grade, setGrade] = useState('')
-  const [candidateId, setCandidateId] = useState('')
-  const [status, setStatus] = useState('Loading...')
-  const [votingOpen, setVotingOpen] = useState(true)
-  const [message, setMessage] = useState({ text: '', type: '' })
+// EDIT YOUR CANDIDATES HERE
+const CANDIDATES = [
+  { id: "c1", name: "Candidate A", photo: "https://via.placeholder.com/150?text=A" },
+  { id: "c2", name: "Candidate B", photo: "https://via.placeholder.com/150?text=B" },
+  { id: "c3", name: "Candidate C", photo: "https://via.placeholder.com/150?text=C" },
+]
+
+export default function App() {
+  const [studentId, setStudentId] = useState("")
+  const [loggedIn, setLoggedIn] = useState(false)
+  const [candidates, setCandidates] = useState(CANDIDATES)
+  const [voted, setVoted] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [message, setMessage] = useState("")
+  const timerRef = useRef(null)
 
-  // Pad ID to 3 digits: 2 -> 002
-  const formatId = (val) => {
-    const num = val.replace(/\D/g, '').slice(0, 3) // only numbers
-    return num
+  // Auto logout after 5 minutes of no activity
+  const resetTimer = () => {
+    if (timerRef.current) clearTimeout(timerRef.current)
+    timerRef.current = setTimeout(() => {
+      handleLogout()
+      alert("Session expired - auto logged out after 5 minutes")
+    }, 5 * 60 * 1000) // 5 mins
   }
 
   useEffect(() => {
-    init()
-  }, [])
-
-  async function init() {
-    try {
-      // Check if voting is open
-      const adminSnap = await getDoc(doc(db, 'settings', 'admin'))
-      if (adminSnap.exists()) {
-        setVotingOpen(adminSnap.data().votingOpen !== false)
-        setStatus(adminSnap.data().electionName || 'School Voting 2026')
-      } else {
-        setStatus('Kings 2026 Voting')
+    if (loggedIn) {
+      resetTimer()
+      window.addEventListener('mousemove', resetTimer)
+      window.addEventListener('keydown', resetTimer)
+      return () => {
+        clearTimeout(timerRef.current)
+        window.removeEventListener('mousemove', resetTimer)
+        window.removeEventListener('keydown', resetTimer)
       }
-
-      // Load candidates
-      const candSnap = await getDocs(collection(db, 'candidates'))
-      const list = []
-      candSnap.forEach(d => list.push({ id: d.id, ...d.data() }))
-      setCandidates(list)
-    } catch (e) {
-      setStatus('Error connecting to Firebase - check Rules')
-      console.error(e)
     }
-  }
+  }, [loggedIn])
 
-  const handleVote = async (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault()
-    setMessage({ text: '', type: '' })
-    
-    // Normalize IDs to 3 digits
-    const paddedStudentId = studentId.padStart(3, '0')
-    const paddedVoucher = voucher.padStart(3, '0')
-    const sidNum = parseInt(paddedStudentId, 10)
-
-    if (!paddedStudentId || sidNum < 1 || sidNum > 200) {
-      return setMessage({ text: 'Student ID must be from 001 to 200', type: 'error' })
-    }
-    if (!paddedVoucher) {
-      return setMessage({ text: 'Please enter your voucher number', type: 'error' })
-    }
-    if (!grade) {
-      return setMessage({ text: 'Please select Grade', type: 'error' })
-    }
-    if (!candidateId) {
-      return setMessage({ text: 'Please select a candidate', type: 'error' })
-    }
+    const id = studentId.trim().padStart(3, '0')
+    if (!id) return
 
     setLoading(true)
+    setMessage("")
     try {
-      // 1. Check if this Student ID already voted
-      const voteQuery = query(collection(db, 'votes'), where('studentId', '==', paddedStudentId))
-      const existingVotes = await getDocs(voteQuery)
-      if (!existingVotes.empty) {
+      // Check if student exists 001-200
+      const studentRef = doc(db, 'students', id)
+      const studentSnap = await getDoc(studentRef)
+
+      if (!studentSnap.exists()) {
+        setMessage(`Student ID ${id} is not valid. Use 001-200`)
         setLoading(false)
-        return setMessage({ text: `Student ID ${paddedStudentId} has already voted!`, type: 'error' })
+        return
       }
 
-      // 2. Check voucher exists and not used
-      const voucherRef = doc(db, 'vouchers', paddedVoucher)
-      const voucherSnap = await getDoc(voucherRef)
-      if (!voucherSnap.exists()) {
+      // Check if already voted
+      const voteRef = doc(db, 'votes', id)
+      const voteSnap = await getDoc(voteRef)
+      if (voteSnap.exists()) {
+        setMessage(`Student ${id} has already voted!`)
         setLoading(false)
-        return setMessage({ text: `Voucher ${paddedVoucher} does not exist.`, type: 'error' })
-      }
-      if (voucherSnap.data().used) {
-        setLoading(false)
-        return setMessage({ text: `Voucher ${paddedVoucher} already used!`, type: 'error' })
+        return
       }
 
-      // 3. Save vote
-      await addDoc(collection(db, 'votes'), {
-        studentId: paddedStudentId,
-        voucher: paddedVoucher,
-        grade,
-        candidateId,
-        timestamp: serverTimestamp()
-      })
-
-      // 4. Mark voucher as used
-      await updateDoc(voucherRef, {
-        used: true,
-        usedBy: paddedStudentId,
-        usedAt: serverTimestamp()
-      })
-
-      // 5. SUCCESS + AUTO LOGOUT
-      setMessage({ text: `Thank you! Vote for ${paddedStudentId} recorded. Logging out...`, type: 'success' })
-      
-      // Clear everything after 3 seconds to avoid next person using same machine
-      setTimeout(() => {
-        setStudentId('')
-        setVoucher('')
-        setGrade('')
-        setCandidateId('')
-        setMessage({ text: '', type: '' })
-        setLoading(false)
-        window.scrollTo(0, 0) // back to top for next voter
-      }, 3000)
-
+      setStudentId(id)
+      setLoggedIn(true)
+      setMessage("")
     } catch (err) {
-      console.error(err)
-      setMessage({ text: 'Error: ' + err.message, type: 'error' })
-      setLoading(false)
+      setMessage("Error: " + err.message)
     }
+    setLoading(false)
   }
 
-  if (!votingOpen) {
+  const handleVote = async (candidateId) => {
+    if (!confirm(`Vote for ${candidateId}? You can only vote once!`)) return
+    setLoading(true)
+    try {
+      await setDoc(doc(db, 'votes', studentId), {
+        studentId,
+        candidateId,
+        votedAt: new Date().toISOString()
+      })
+      setVoted(true)
+      setTimeout(() => handleLogout(), 3000)
+    } catch (err) {
+      setMessage("Vote failed: " + err.message)
+    }
+    setLoading(false)
+  }
+
+  const handleLogout = () => {
+    setLoggedIn(false)
+    setStudentId("")
+    setVoted(false)
+    setMessage("")
+    if (timerRef.current) clearTimeout(timerRef.current)
+  }
+
+  // LOGIN PAGE
+  if (!loggedIn) {
     return (
-      <div style={{ maxWidth: 400, margin: '50px auto', textAlign: 'center', fontFamily: 'sans-serif' }}>
-        <h2>Voting Closed</h2>
-        <p>{status}</p>
+      <div style={{ maxWidth: 400, margin: '50px auto', padding: 20, fontFamily: 'sans-serif', textAlign: 'center' }}>
+        <h1>King's Voting 2026</h1>
+        <p>Enter your Student ID (001-200)</p>
+        <form onSubmit={handleLogin}>
+          <input
+            value={studentId}
+            onChange={e => setStudentId(e.target.value)}
+            placeholder="e.g. 001"
+            style={{ padding: 12, width: '100%', fontSize: 18, textAlign: 'center', marginBottom: 10 }}
+          />
+          <button disabled={loading} style={{ padding: '12px 20px', width: '100%', fontSize: 16, background: '#000', color: '#fff', cursor: 'pointer' }}>
+            {loading? 'Checking...' : 'Login to Vote'}
+          </button>
+        </form>
+        {message && <p style={{ color: 'red', marginTop: 15 }}>{message}</p>}
       </div>
     )
   }
 
-  return (
-    <div style={{ maxWidth: 480, margin: '20px auto', padding: 20, fontFamily: 'sans-serif' }}>
-      <div style={{ background: '#f0f7ff', padding: 15, borderRadius: 10, marginBottom: 20 }}>
-        <h2 style={{ margin: 0 }}>{status}</h2>
-        <small>ID format: 001 to 200 | One voucher = one vote</small>
+  // VOTED PAGE
+  if (voted) {
+    return (
+      <div style={{ maxWidth: 400, margin: '100px auto', textAlign: 'center', fontFamily: 'sans-serif' }}>
+        <h1>✅ Thank you!</h1>
+        <p>Your vote has been recorded for Student {studentId}</p>
+        <p>Logging out...</p>
       </div>
+    )
+  }
 
-      <form onSubmit={handleVote} style={{ display: 'flex', flexDirection: 'column', gap: 12, background: 'white', padding: 20, borderRadius: 10, boxShadow: '0 2px 10px rgba(0,0,0,0.1)' }}>
-        <label>Student ID (001 - 200)</label>
-        <input 
-          type="text" 
-          value={studentId}
-          onChange={e => setStudentId(formatId(e.target.value))}
-          placeholder="e.g. 002 or 045" 
-          required
-          style={{ padding: 12, fontSize: 18, letterSpacing: 2 }}
-        />
-
-        <label>Voucher Number</label>
-        <input 
-          type="text" 
-          value={voucher}
-          onChange={e => setVoucher(formatId(e.target.value))}
-          placeholder="Given voucher e.g. 002" 
-          required
-          style={{ padding: 12, fontSize: 18, letterSpacing: 2 }}
-        />
-
-        <label>Grade</label>
-        <select value={grade} onChange={e => setGrade(e.target.value)} required style={{ padding: 12, fontSize: 16 }}>
-          <option value="">Select Grade</option>
-          {Array.from({ length: 12 }, (_, i) => (
-            <option key={i+1} value={`Grade ${i+1}`}>Grade {i+1}</option>
-          ))}
-        </select>
-
-        <label>Select Candidate</label>
-        <select value={candidateId} onChange={e => setCandidateId(e.target.value)} required style={{ padding: 12, fontSize: 16 }}>
-          <option value="">Choose...</option>
-          {candidates.map(c => (
-            <option key={c.id} value={c.id}>{c.name} - {c.position}</option>
-          ))}
-        </select>
-
-        <button type="submit" disabled={loading} style={{ padding: 14, background: loading ? '#ccc' : '#0a58ca', color: 'white', border: 'none', borderRadius: 8, fontSize: 18, marginTop: 10 }}>
-          {loading ? 'Submitting...' : 'Submit Vote'}
-        </button>
-
-        {message.text && (
-          <div style={{ padding: 12, borderRadius: 8, background: message.type === 'error' ? '#ffe0e0' : '#d4edda', color: message.type === 'error' ? '#a00' : '#155724', textAlign: 'center', fontWeight: 'bold' }}>
-            {message.text}
+  // VOTING PAGE
+  return (
+    <div style={{ maxWidth: 800, margin: '20px auto', padding: 20, fontFamily: 'sans-serif' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h2>Welcome, Student {studentId}</h2>
+        <button onClick={handleLogout} style={{ padding: '8px 15px' }}>Logout</button>
+      </div>
+      <p>Auto logout in 5 mins of inactivity. One vote only.</p>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 20, marginTop: 30 }}>
+        {candidates.map(c => (
+          <div key={c.id} style={{ border: '1px solid #ddd', padding: 15, borderRadius: 10, textAlign: 'center' }}>
+            <img src={c.photo} alt={c.name} style={{ width: '100%', height: 150, objectFit: 'cover', borderRadius: 8 }} />
+            <h3>{c.name}</h3>
+            <button disabled={loading} onClick={() => handleVote(c.id)} style={{ padding: '10px 20px', background: '#000', color: '#fff', cursor: 'pointer', width: '100%' }}>
+              Vote
+            </button>
           </div>
-        )}
-      </form>
+        ))}
+      </div>
+      {message && <p style={{ color: 'red' }}>{message}</p>}
     </div>
   )
 }
-
-export default App
