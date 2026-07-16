@@ -32,13 +32,10 @@ export default function App() {
 
   const positions = [...new Set(candidates.map(c => c.position))]
 
-  // Load dynamic candidates from Firebase if exists
   useEffect(()=>{
     (async()=>{
       const snap = await getDocs(collection(db,'config_candidates'))
-      if(!snap.empty){
-        setCandidates(snap.docs.map(d=>({firebaseId:d.id,...d.data()})))
-      }
+      if(!snap.empty) setCandidates(snap.docs.map(d=>({firebaseId:d.id,...d.data()})))
     })()
   },[])
 
@@ -74,7 +71,6 @@ export default function App() {
     const candSnap = await getDocs(collection(db,'config_candidates'))
     if(!candSnap.empty) setCandidates(candSnap.docs.map(d=>({firebaseId:d.id,...d.data()})))
     else {
-      // first time - migrate static to firebase
       for(let c of STATIC_CANDIDATES){ await addDoc(collection(db,'config_candidates'), c) }
       const newSnap = await getDocs(collection(db,'config_candidates'))
       setCandidates(newSnap.docs.map(d=>({firebaseId:d.id,...d.data()})))
@@ -83,63 +79,77 @@ export default function App() {
   }
 
   const handleAddCandidate = async () => {
-    if(!newCand.name ||!newCand.position ||!newCand.photo){ alert("Fill name, position, photo"); return }
+    if(!newCand.name ||!newCand.position ||!newCand.photo){ alert("Fill all fields"); return }
     setLoading(true)
-    if(editId){
-      await updateDoc(doc(db,'config_candidates',editId), newCand)
-      setEditId(null)
-    } else {
-      const id = `${newCand.position.toLowerCase().replace(/\s+/g,'-')}-${Date.now()}`
-      await addDoc(collection(db,'config_candidates'), { id,...newCand })
-    }
+    if(editId){ await updateDoc(doc(db,'config_candidates',editId), newCand); setEditId(null) }
+    else { const id = `${newCand.position.toLowerCase().replace(/\s+/g,'-')}-${Date.now()}`; await addDoc(collection(db,'config_candidates'), { id,...newCand }) }
     const snap = await getDocs(collection(db,'config_candidates'))
     setCandidates(snap.docs.map(d=>({firebaseId:d.id,...d.data()})))
     setNewCand({ name:"", position:"", photo:"" }); setLoading(false)
   }
-
   const handleEdit = (c) => { setNewCand({ name:c.name, position:c.position, photo:c.photo }); setEditId(c.firebaseId); window.scrollTo(0,0) }
   const handleDelete = async (fid) => { if(!confirm("Delete candidate?")) return; await deleteDoc(doc(db,'config_candidates',fid)); setCandidates(candidates.filter(c=>c.firebaseId!==fid)) }
-
   const resetAllVotes = async () => {
-    if(!confirm("RESET ALL VOTES? This cannot be undone!")) return
+    if(!confirm("RESET ALL VOTES?")) return
     setLoading(true)
     const snap = await getDocs(collection(db,'votes'))
     for(let d of snap.docs){ await deleteDoc(d.ref) }
     setVotesData([]); alert("All votes reset"); setLoading(false)
   }
-
   const handleLogout = () => { setLoggedIn(false); setStudentId(""); setSelections({}); setVoted(false); setMessage(""); setShowAdmin(false); setAdminPass(""); if(timerRef.current) clearTimeout(timerRef.current) }
   const getCount = (pos, candId) => votesData.filter(v=>v.votes[pos]===candId).length
 
   if(showAdmin) return (
-    <div style={{maxWidth:1200, margin:'20px auto', padding:20, fontFamily:'sans-serif'}}>
-      <div style={{display:'flex', justifyContent:'space-between'}}><h1>Admin Dashboard</h1><button onClick={handleLogout}>Exit</button></div>
-      <div style={{display:'flex', gap:10, flexWrap:'wrap'}}>
-        <div style={{border:'1px solid #ddd', padding:15, borderRadius:10, flex:1}}><h3>Total Voted: {votesData.length}</h3><button onClick={resetAllVotes} style={{background:'red', color:'#fff', padding:'10px 15px', border:'none', cursor:'pointer'}}>🗑️ RESET ALL VOTES</button></div>
-        <div style={{border:'1px solid #ddd', padding:15, borderRadius:10, flex:2}}>
-          <h3>{editId? "Edit Candidate" : "Add New Candidate"}</h3>
-          <input value={newCand.name} onChange={e=>setNewCand({...newCand, name:e.target.value.toUpperCase()})} placeholder="Full Name (e.g. JOHN DOE)" style={{padding:8, width:'100%', marginBottom:8}}/>
-          <input value={newCand.position} onChange={e=>setNewCand({...newCand, position:e.target.value.toUpperCase()})} placeholder="Position (e.g. PRESIDENT or new position)" style={{padding:8, width:'100%', marginBottom:8}}/>
-          <input value={newCand.photo} onChange={e=>setNewCand({...newCand, photo:e.target.value})} placeholder="Photo path: /images/candidates/president-john.jpg" style={{padding:8, width:'100%', marginBottom:8}}/>
-          <p style={{fontSize:12, color:'#666'}}>1. First upload image to GitHub: public/images/candidates/ <br/>2. Then paste path: /images/candidates/your-file.jpg</p>
-          <button onClick={handleAddCandidate} style={{background:'#0d5c5c', color:'#fff', padding:10, width:'100%'}}>{editId? "Update Candidate" : "Add Candidate"}</button>
-          {editId && <button onClick={()=>{setEditId(null); setNewCand({name:"", position:"", photo:""})}} style={{marginTop:5, width:'100%'}}>Cancel Edit</button>}
+    <div style={{maxWidth:1200, margin:'20px auto', padding:20, fontFamily:'sans-serif', background:'#f8f9fa', minHeight:'100vh'}}>
+      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', background:'#fff', padding:15, borderRadius:10}}>
+        <h1 style={{margin:0}}>Admin Dashboard</h1>
+        <div><span style={{marginRight:15}}><b>{votesData.length}</b> voted</span><button onClick={handleLogout} style={{padding:'8px 15px'}}>Exit</button></div>
+      </div>
+
+      <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:15, marginTop:20}}>
+        <div style={{background:'#fff', padding:15, borderRadius:10}}><h3>Manage Votes</h3><p>Total Votes: <b>{votesData.length}</b></p><button onClick={resetAllVotes} style={{background:'#dc3545', color:'#fff', padding:'12px', width:'100%', border:'none', borderRadius:8, cursor:'pointer', fontWeight:'bold'}}>🗑️ RESET ALL VOTES</button></div>
+        <div style={{background:'#fff', padding:15, borderRadius:10}}>
+          <h3>{editId? "Edit Candidate" : "Add Candidate"}</h3>
+          <input value={newCand.name} onChange={e=>setNewCand({...newCand, name:e.target.value.toUpperCase()})} placeholder="Full Name" style={{padding:10, width:'100%', marginBottom:8, borderRadius:6, border:'1px solid #ddd'}}/>
+          <input value={newCand.position} onChange={e=>setNewCand({...newCand, position:e.target.value.toUpperCase()})} placeholder="Position (e.g. PRESIDENT)" style={{padding:10, width:'100%', marginBottom:8, borderRadius:6, border:'1px solid #ddd'}}/>
+          <input value={newCand.photo} onChange={e=>setNewCand({...newCand, photo:e.target.value})} placeholder="/images/candidates/name.jpg" style={{padding:10, width:'100%', marginBottom:8, borderRadius:6, border:'1px solid #ddd'}}/>
+          <button onClick={handleAddCandidate} style={{background:'#0d5c5c', color:'#fff', padding:12, width:'100%', border:'none', borderRadius:8}}>{editId? "Update" : "Add Candidate"}</button>
+          {editId && <button onClick={()=>{setEditId(null); setNewCand({name:"", position:"", photo:""})}} style={{marginTop:5, width:'100%', padding:8}}>Cancel</button>}
         </div>
       </div>
 
-      {positions.map(pos=>(
-        <div key={pos} style={{marginTop:30, border:'1px solid #ddd', padding:15, borderRadius:10}}>
-          <h2 style={{background:'#0d5c5c', color:'#fff', padding:10, borderRadius:8}}>{pos} - {candidates.filter(c=>c.position===pos).length} candidates</h2>
-          {candidates.filter(c=>c.position===pos).map(c=>(
-            <div key={c.firebaseId || c.id} style={{display:'flex', alignItems:'center', gap:15, padding:10, borderBottom:'1px solid #eee'}}>
-              <img src={c.photo} style={{width:60, height:60, objectFit:'cover', borderRadius:8}}/>
-              <div style={{flex:1}}><b>{c.name}</b><br/>{c.photo}<br/><b>{getCount(pos, c.id)} votes</b></div>
-              <button onClick={()=>handleEdit(c)} style={{padding:'5px 10px'}}>Edit</button>
-              <button onClick={()=>handleDelete(c.firebaseId)} style={{padding:'5px 10px', background:'red', color:'#fff'}}>Delete</button>
-            </div>
-          ))}
+      {positions.map(pos=>{
+        const totalPosVotes = votesData.length
+        const maxVotes = Math.max(...candidates.filter(c=>c.position===pos).map(c=>getCount(pos,c.id)),1)
+        return (
+        <div key={pos} style={{marginTop:25, background:'#fff', padding:20, borderRadius:12, boxShadow:'0 2px 8px rgba(0,0,0,0.05)'}}>
+          <h2 style={{background:'#0d5c5c', color:'#fff', padding:12, borderRadius:8, marginTop:0}}>{pos}</h2>
+          <div style={{display:'flex', flexDirection:'column', gap:15}}>
+            {candidates.filter(c=>c.position===pos).map(c=>{
+              const count = getCount(pos, c.id)
+              const percent = totalPosVotes? ((count/totalPosVotes)*100).toFixed(1) : 0
+              const barWidth = (count/maxVotes)*100
+              return (
+                <div key={c.firebaseId || c.id} style={{display:'flex', alignItems:'center', gap:12, padding:12, border:'1px solid #eee', borderRadius:10}}>
+                  <img src={c.photo} style={{width:65, height:65, objectFit:'cover', borderRadius:50, border:'2px solid #0d5c5c'}} alt=""/>
+                  <div style={{flex:1}}>
+                    <div style={{display:'flex', justifyContent:'space-between'}}><b>{c.name}</b><span><b>{count}</b> votes • {percent}%</span></div>
+                    <div style={{background:'#e9ecef', height:22, borderRadius:20, marginTop:8, overflow:'hidden', position:'relative'}}>
+                      <div style={{background: count===maxVotes && count>0? '#0d5c5c' : '#6bb6b6', width:`${barWidth}%`, height:'100%', borderRadius:20, transition:'width 0.8s ease', display:'flex', alignItems:'center', justifyContent:'flex-end', paddingRight:8, color:'#fff', fontWeight:'bold', fontSize:12}}>
+                        {count>0 && `${percent}%`}
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{display:'flex', flexDirection:'column', gap:5}}>
+                    <button onClick={()=>handleEdit(c)} style={{padding:'6px 10px', borderRadius:6, border:'1px solid #ddd', cursor:'pointer'}}>Edit</button>
+                    <button onClick={()=>handleDelete(c.firebaseId)} style={{padding:'6px 10px', background:'#ff4444', color:'#fff', border:'none', borderRadius:6, cursor:'pointer'}}>Del</button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
         </div>
-      ))}
+      )})}
     </div>
   )
 
@@ -159,7 +169,7 @@ export default function App() {
       </div>
     </div>
   )
-  if(voted) return <div style={{textAlign:'center', marginTop:100}}><h1>✅ Vote Recorded!</h1></div>
+  if(voted) return <div style={{textAlign:'center', marginTop:100, fontFamily:'sans-serif'}}><h1>✅ Vote Recorded!</h1><p>Thank you</p></div>
 
   return (
     <div style={{maxWidth:1000, margin:'20px auto', padding:20, fontFamily:'sans-serif'}}>
@@ -171,7 +181,7 @@ export default function App() {
             {candidates.filter(c=>c.position===pos).map(c=>(
               <div key={c.id} onClick={()=>setSelections({...selections, [pos]:c.id})} style={{border: selections[pos]===c.id? '3px solid #0d5c5c':'1px solid #ddd', padding:10, borderRadius:10, cursor:'pointer', textAlign:'center', background: selections[pos]===c.id? '#f0ffff':'#fff'}}>
                 <img src={c.photo} alt={c.name} style={{width:'100%', height:220, objectFit:'cover', borderRadius:8}}/>
-                <p style={{fontWeight:'bold'}}>{c.name}</p>
+                <p style={{fontWeight:'bold', marginTop:8}}>{c.name}</p>
               </div>
             ))}
           </div>
