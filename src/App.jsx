@@ -29,22 +29,10 @@ export default function App() {
   const [newCand, setNewCand] = useState({ name:"", position:"", photo:"" })
   const [editId, setEditId] = useState(null)
   const timerRef = useRef(null)
-
   const positions = [...new Set(candidates.map(c => c.position))]
-
-  useEffect(()=>{
-    (async()=>{
-      const snap = await getDocs(collection(db,'config_candidates'))
-      if(!snap.empty) setCandidates(snap.docs.map(d=>({firebaseId:d.id,...d.data()})))
-    })()
-  },[])
-
-  const resetTimer = () => {
-    if (timerRef.current) clearTimeout(timerRef.current)
-    timerRef.current = setTimeout(() => { handleLogout(); }, 5*60*1000)
-  }
+  useEffect(()=>{ (async()=>{ const snap = await getDocs(collection(db,'config_candidates')); if(!snap.empty) setCandidates(snap.docs.map(d=>({firebaseId:d.id,...d.data()}))) })() },[])
+  const resetTimer = () => { if (timerRef.current) clearTimeout(timerRef.current); timerRef.current = setTimeout(() => { handleLogout(); }, 5*60*1000) }
   useEffect(()=>{ if(loggedIn){ resetTimer(); window.addEventListener('mousemove', resetTimer); window.addEventListener('keydown', resetTimer); return ()=>{ clearTimeout(timerRef.current); window.removeEventListener('mousemove', resetTimer); window.removeEventListener('keydown', resetTimer)} } },[loggedIn])
-
   const handleLogin = async (e) => {
     e.preventDefault()
     const id = studentId.trim().padStart(3,'0')
@@ -55,14 +43,12 @@ export default function App() {
     if(vSnap.exists()){ setMessage("Already voted"); setLoading(false); return }
     setStudentId(id); setLoggedIn(true); setLoading(false)
   }
-
   const handleSubmitAll = async () => {
     if(Object.keys(selections).length!== positions.length){ alert("Vote for all positions"); return }
     setLoading(true)
     await setDoc(doc(db,'votes',studentId), { studentId, votes: selections, votedAt: new Date().toISOString() })
     setVoted(true); setTimeout(()=>handleLogout(), 3000); setLoading(false)
   }
-
   const loadResults = async () => {
     if(adminPass!== ADMIN_PASSWORD){ alert("Unauthorized"); return }
     setLoading(true)
@@ -77,7 +63,6 @@ export default function App() {
     }
     setShowAdmin(true); setLoading(false)
   }
-
   const handleAddCandidate = async () => {
     if(!newCand.name ||!newCand.position ||!newCand.photo){ alert("Fill all fields"); return }
     setLoading(true)
@@ -98,7 +83,6 @@ export default function App() {
   }
   const handleLogout = () => { setLoggedIn(false); setStudentId(""); setSelections({}); setVoted(false); setMessage(""); setShowAdmin(false); setAdminPass(""); if(timerRef.current) clearTimeout(timerRef.current) }
   const getCount = (pos, candId) => votesData.filter(v=>v.votes[pos]===candId).length
-
   if(showAdmin) return (
     <div style={{maxWidth:1200, margin:'20px auto', padding:20, fontFamily:'sans-serif', background:'#f8f9fa', minHeight:'100vh'}}>
       <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', background:'#fff', padding:15, borderRadius:10}}>
@@ -133,7 +117,6 @@ export default function App() {
       )})}
     </div>
   )
-
   if(!loggedIn) return (
     <div style={{maxWidth:400, margin:'50px auto', padding:20, textAlign:'center', fontFamily:'sans-serif'}}>
       <h1>The Kings Voting 2026/27</h1>
@@ -151,7 +134,6 @@ export default function App() {
     </div>
   )
   if(voted) return <div style={{textAlign:'center', marginTop:100, fontFamily:'sans-serif'}}><h1>✅ Vote Recorded!</h1><p>Thank you</p></div>
-
   return (
     <div style={{maxWidth:800, margin:'20px auto', padding:20, fontFamily:'sans-serif'}}>
       <div style={{display:'flex', justifyContent:'space-between'}}><h2>Voter: {studentId}</h2><button onClick={handleLogout}>Logout</button></div>
