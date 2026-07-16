@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { initializeApp } from 'firebase/app'
-import { getFirestore, doc, getDoc, setDoc, collection, getDocs } from 'firebase/firestore'
+import { getFirestore, doc, getDoc, setDoc } from 'firebase/firestore'
+import { CANDIDATES } from "./candidates.js"
 
 const firebaseConfig = {
   apiKey: "AIzaSyAwb6ozidFs6_LFW0ktj8oBDAcAFJpe7Ag",
@@ -10,162 +11,86 @@ const firebaseConfig = {
   messagingSenderId: "708043016849",
   appId: "1:708043016849:web:e658aa9b22286016c20d30"
 };
-
 const app = initializeApp(firebaseConfig)
 const db = getFirestore(app)
-
-// EDIT YOUR CANDIDATES HERE
-const CANDIDATES = [
-  { id: "c1", name: "Candidate A", photo: "https://via.placeholder.com/150?text=A" },
-  { id: "c2", name: "Candidate B", photo: "https://via.placeholder.com/150?text=B" },
-  { id: "c3", name: "Candidate C", photo: "https://via.placeholder.com/150?text=C" },
-]
 
 export default function App() {
   const [studentId, setStudentId] = useState("")
   const [loggedIn, setLoggedIn] = useState(false)
-  const [candidates, setCandidates] = useState(CANDIDATES)
+  const [selections, setSelections] = useState({})
   const [voted, setVoted] = useState(false)
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState("")
   const timerRef = useRef(null)
 
-  // Auto logout after 5 minutes of no activity
+  const positions = [...new Set(CANDIDATES.map(c => c.position))]
+
   const resetTimer = () => {
     if (timerRef.current) clearTimeout(timerRef.current)
-    timerRef.current = setTimeout(() => {
-      handleLogout()
-      alert("Session expired - auto logged out after 5 minutes")
-    }, 5 * 60 * 1000) // 5 mins
+    timerRef.current = setTimeout(() => { handleLogout(); alert("Auto logged out - 5 min inactivity") }, 5*60*1000)
   }
-
-  useEffect(() => {
-    if (loggedIn) {
-      resetTimer()
-      window.addEventListener('mousemove', resetTimer)
-      window.addEventListener('keydown', resetTimer)
-      return () => {
-        clearTimeout(timerRef.current)
-        window.removeEventListener('mousemove', resetTimer)
-        window.removeEventListener('keydown', resetTimer)
-      }
-    }
-  }, [loggedIn])
+  useEffect(()=>{ if(loggedIn){ resetTimer(); window.addEventListener('mousemove', resetTimer); window.addEventListener('keydown', resetTimer); return ()=>{ clearTimeout(timerRef.current); window.removeEventListener('mousemove', resetTimer); window.removeEventListener('keydown', resetTimer)} } },[loggedIn])
 
   const handleLogin = async (e) => {
     e.preventDefault()
-    const id = studentId.trim().padStart(3, '0')
-    if (!id) return
-
-    setLoading(true)
-    setMessage("")
+    const id = studentId.trim().padStart(3,'0')
+    setLoading(true); setMessage("")
     try {
-      // Check if student exists 001-200
-      const studentRef = doc(db, 'students', id)
-      const studentSnap = await getDoc(studentRef)
-
-      if (!studentSnap.exists()) {
-        setMessage(`Student ID ${id} is not valid. Use 001-200`)
-        setLoading(false)
-        return
-      }
-
-      // Check if already voted
-      const voteRef = doc(db, 'votes', id)
-      const voteSnap = await getDoc(voteRef)
-      if (voteSnap.exists()) {
-        setMessage(`Student ${id} has already voted!`)
-        setLoading(false)
-        return
-      }
-
-      setStudentId(id)
-      setLoggedIn(true)
-      setMessage("")
-    } catch (err) {
-      setMessage("Error: " + err.message)
-    }
+      const sSnap = await getDoc(doc(db,'students',id))
+      if(!sSnap.exists()){ setMessage(`ID ${id} invalid. Use 001-200`); setLoading(false); return }
+      const vSnap = await getDoc(doc(db,'votes',id))
+      if(vSnap.exists()){ setMessage(`Student ${id} already voted!`); setLoading(false); return }
+      setStudentId(id); setLoggedIn(true)
+    } catch(err){ setMessage(err.message) }
     setLoading(false)
   }
 
-  const handleVote = async (candidateId) => {
-    if (!confirm(`Vote for ${candidateId}? You can only vote once!`)) return
+  const handleSubmitAll = async () => {
+    if(Object.keys(selections).length!== positions.length){ alert(`Please vote for ALL ${positions.length} positions before submitting`); return }
     setLoading(true)
     try {
-      await setDoc(doc(db, 'votes', studentId), {
-        studentId,
-        candidateId,
-        votedAt: new Date().toISOString()
-      })
+      await setDoc(doc(db,'votes',studentId), { studentId, votes: selections, votedAt: new Date().toISOString() })
       setVoted(true)
-      setTimeout(() => handleLogout(), 3000)
-    } catch (err) {
-      setMessage("Vote failed: " + err.message)
-    }
+      setTimeout(()=>handleLogout(), 4000)
+    } catch(e){ setMessage(e.message) }
     setLoading(false)
   }
 
-  const handleLogout = () => {
-    setLoggedIn(false)
-    setStudentId("")
-    setVoted(false)
-    setMessage("")
-    if (timerRef.current) clearTimeout(timerRef.current)
-  }
+  const handleLogout = () => { setLoggedIn(false); setStudentId(""); setSelections({}); setVoted(false); setMessage(""); if(timerRef.current) clearTimeout(timerRef.current) }
 
-  // LOGIN PAGE
-  if (!loggedIn) {
-    return (
-      <div style={{ maxWidth: 400, margin: '50px auto', padding: 20, fontFamily: 'sans-serif', textAlign: 'center' }}>
-        <h1>King's Voting 2026</h1>
-        <p>Enter your Student ID (001-200)</p>
-        <form onSubmit={handleLogin}>
-          <input
-            value={studentId}
-            onChange={e => setStudentId(e.target.value)}
-            placeholder="e.g. 001"
-            style={{ padding: 12, width: '100%', fontSize: 18, textAlign: 'center', marginBottom: 10 }}
-          />
-          <button disabled={loading} style={{ padding: '12px 20px', width: '100%', fontSize: 16, background: '#000', color: '#fff', cursor: 'pointer' }}>
-            {loading? 'Checking...' : 'Login to Vote'}
-          </button>
-        </form>
-        {message && <p style={{ color: 'red', marginTop: 15 }}>{message}</p>}
-      </div>
-    )
-  }
+  if(!loggedIn) return (
+    <div style={{maxWidth:400, margin:'50px auto', padding:20, textAlign:'center', fontFamily:'sans-serif'}}>
+      <h1>The Kings Voting 2026/27</h1>
+      <p>Enter Student ID (001-200)</p>
+      <form onSubmit={handleLogin}>
+        <input value={studentId} onChange={e=>setStudentId(e.target.value)} placeholder="e.g. 001" style={{padding:12, width:'100%', fontSize:18, textAlign:'center'}}/>
+        <button disabled={loading} style={{marginTop:10, padding:12, width:'100%', background:'#000', color:'#fff', fontSize:16}}>{loading?'Checking...':'Login'}</button>
+      </form>
+      {message && <p style={{color:'red', marginTop:15}}>{message}</p>}
+    </div>
+  )
+  if(voted) return <div style={{textAlign:'center', marginTop:100, fontFamily:'sans-serif'}}><h1>✅ Vote Recorded!</h1><p>Thank you Student {studentId}</p><p>Logging out...</p></div>
 
-  // VOTED PAGE
-  if (voted) {
-    return (
-      <div style={{ maxWidth: 400, margin: '100px auto', textAlign: 'center', fontFamily: 'sans-serif' }}>
-        <h1>✅ Thank you!</h1>
-        <p>Your vote has been recorded for Student {studentId}</p>
-        <p>Logging out...</p>
-      </div>
-    )
-  }
-
-  // VOTING PAGE
   return (
-    <div style={{ maxWidth: 800, margin: '20px auto', padding: 20, fontFamily: 'sans-serif' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h2>Welcome, Student {studentId}</h2>
-        <button onClick={handleLogout} style={{ padding: '8px 15px' }}>Logout</button>
-      </div>
-      <p>Auto logout in 5 mins of inactivity. One vote only.</p>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 20, marginTop: 30 }}>
-        {candidates.map(c => (
-          <div key={c.id} style={{ border: '1px solid #ddd', padding: 15, borderRadius: 10, textAlign: 'center' }}>
-            <img src={c.photo} alt={c.name} style={{ width: '100%', height: 150, objectFit: 'cover', borderRadius: 8 }} />
-            <h3>{c.name}</h3>
-            <button disabled={loading} onClick={() => handleVote(c.id)} style={{ padding: '10px 20px', background: '#000', color: '#fff', cursor: 'pointer', width: '100%' }}>
-              Vote
-            </button>
+    <div style={{maxWidth:1000, margin:'20px auto', padding:20, fontFamily:'sans-serif'}}>
+      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}><h2>Student {studentId}</h2><button onClick={handleLogout} style={{padding:'8px 15px'}}>Logout</button></div>
+      <p>Select ONE candidate per position. Auto logout after 5 mins.</p>
+      {positions.map(pos => (
+        <div key={pos} style={{marginTop:30}}>
+          <h3 style={{background:'#0d5c5c', color:'#fff', padding:10, borderRadius:8}}>{pos}</h3>
+          <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(180px,1fr))', gap:15}}>
+            {CANDIDATES.filter(c=>c.position===pos).map(c=>(
+              <div key={c.id} onClick={()=>setSelections({...selections, [pos]:c.id})} style={{border: selections[pos]===c.id? '3px solid #0d5c5c':'1px solid #ddd', padding:10, borderRadius:10, cursor:'pointer', textAlign:'center', background: selections[pos]===c.id? '#f0ffff':'#fff'}}>
+                <img src={c.photo} alt={c.name} style={{width:'100%', height:220, objectFit:'cover', borderRadius:8}}/>
+                <p style={{fontWeight:'bold', margin:'8px 0 0'}}>{c.name}</p>
+                <small>{c.position}</small>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
-      {message && <p style={{ color: 'red' }}>{message}</p>}
+        </div>
+      ))}
+      <button onClick={handleSubmitAll} disabled={loading} style={{marginTop:40, padding:15, width:'100%', background:'#000', color:'#fff', fontSize:18, cursor:'pointer'}}>{loading?'Submitting...':'SUBMIT ALL VOTES'}</button>
+      {message && <p style={{color:'red'}}>{message}</p>}
     </div>
   )
 }
